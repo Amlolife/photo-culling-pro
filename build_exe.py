@@ -18,9 +18,9 @@ a = Analysis(
     hiddenimports=[
         'pyiqa',
         'pyiqa.archs',
-        'pyiqa.archs.brisque',
-        'pyiqa.archs.niqe',
-        'pyiqa.archs.piqe',
+        'pyiqa.archs.brisque_arch',
+        'pyiqa.archs.niqe_arch',
+        'pyiqa.archs.piqe_arch',
         'pyiqa.utils',
         'pyiqa.data',
         'pyiqa.losses',

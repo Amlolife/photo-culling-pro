@@ -21,7 +21,7 @@ A comprehensive web-based photo culling solution with AI-powered image quality a
 ## Quick Start
 
 ### Prerequisites
-- Python 3.8 or higher
+- Python 3.10 or higher
 - OpenCV compatible system
 - At least 4GB RAM (8GB recommended for large batches)
 
@@ -137,8 +137,9 @@ python app.py
 ```
 photo-culling-pro/
 ├── app.py                 # Main Flask application
-├── config.py              # Configuration settings
 ├── requirements.txt       # Python dependencies
+├── pyproject.toml         # Project configuration
+├── README.md              # This file
 ├── templates/
 │   └── index.html        # Main HTML template
 ├── static/

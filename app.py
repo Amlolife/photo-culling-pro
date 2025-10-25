@@ -22,8 +22,20 @@ import logging
 import io
 import csv
 from flask import Response
+import sys
 
-app = Flask(__name__)
+# Handle packaged paths
+if getattr(sys, 'frozen', False):
+    # Running in a bundle
+    bundle_dir = sys._MEIPASS
+else:
+    # Running in normal Python environment
+    bundle_dir = os.path.dirname(os.path.abspath(__file__))
+
+template_dir = os.path.join(bundle_dir, 'templates')
+static_dir = os.path.join(bundle_dir, 'static')
+
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)

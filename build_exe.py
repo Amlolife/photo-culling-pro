@@ -14,6 +14,9 @@ def build():
         '--windowed',
         '--onefile',
         '--collect-all', 'pyiqa',
+        '--collect-all', 'scipy',
+        '--collect-all', 'torch',
+        '--collect-all', 'torchvision',
     ]
 
     data_paths = [

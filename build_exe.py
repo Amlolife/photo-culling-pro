@@ -13,6 +13,7 @@ def build():
         '--name', 'PhotoCullPro',
         '--windowed',
         '--onefile',
+        '--collect-all', 'pyiqa',
     ]
 
     data_paths = [

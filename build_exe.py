@@ -1,26 +1,35 @@
-import PyInstaller.__main__
 import os
+from pathlib import Path
 
-# Create a spec file content
-spec_content = '''
-# -*- mode: python ; coding: utf-8 -*-
+import PyInstaller.__main__
+from PyInstaller.utils.hooks import collect_submodules, collect_data_files
 
-block_cipher = None
 
-a = Analysis(
-    ['app.py'],
-    pathex=[],
-    binaries=[],
-    datas=[
-        ('templates', 'templates'),
-        ('static', 'static'),
-    ],
-    hiddenimports=[
+def build():
+    project_root = Path(__file__).resolve().parent
+
+    pyinstaller_args = [
+        '--clean',
+        '--name', 'PhotoCullPro',
+        '--windowed',
+    ]
+
+    data_paths = [
+        (project_root / 'templates', 'templates'),
+        (project_root / 'static', 'static'),
+    ]
+
+    pyiqa_data = collect_data_files('pyiqa', includes=['archs/*'])
+    data_paths.extend(pyiqa_data)
+
+    for src_path, dest_rel in data_paths:
+        pyinstaller_args.extend([
+            '--add-data', f'{src_path}{os.pathsep}{dest_rel}'
+        ])
+
+    hiddenimports = {
         'pyiqa',
         'pyiqa.archs',
-        'pyiqa.archs.brisque_arch',
-        'pyiqa.archs.niqe_arch',
-        'pyiqa.archs.piqe_arch',
         'pyiqa.utils',
         'pyiqa.data',
         'pyiqa.losses',
@@ -33,49 +42,16 @@ a = Analysis(
         'flask',
         'imagehash',
         'skimage',
-    ],
-    hookspath=[],
-    hooksconfig={},
-    runtime_hooks=[],
-    excludes=[],
-    win_no_prefer_redirects=False,
-    win_private_assemblies=False,
-    cipher=block_cipher,
-    noarchive=False,
-    collect_all=['pyiqa'],
-)
+    }
+    hiddenimports.update(collect_submodules('pyiqa.archs'))
 
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+    for module in sorted(hiddenimports):
+        pyinstaller_args.extend(['--hidden-import', module])
 
-exe = EXE(
-    pyz,
-    a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
-    [],
-    name='PhotoCullPro',
-    debug=False,
-    bootloader_ignore_signals=False,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
-    console=False,
-    disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
-)
-'''
+    pyinstaller_args.append(str(project_root / 'app.py'))
 
-# Write the spec file
-with open('PhotoCullPro.spec', 'w') as f:
-    f.write(spec_content)
+    PyInstaller.__main__.run([str(arg) for arg in pyinstaller_args])
 
-# Run PyInstaller with the spec
-PyInstaller.__main__.run([
-    '--clean',
-    'PhotoCullPro.spec'
-])
+
+if __name__ == '__main__':
+    build()

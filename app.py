@@ -1,4 +1,5 @@
 import os
+import sys
 import cv2
 import numpy as np
 import json
@@ -11,8 +12,6 @@ import sqlite3
 import threading
 from pathlib import Path
 import imagehash
-import pyiqa
-import torch
 from skimage.measure import shannon_entropy
 from concurrent.futures import ThreadPoolExecutor
 import zipfile
@@ -21,7 +20,28 @@ import logging
 import io
 import csv
 from flask import Response
-import sys
+
+# Apply pyiqa patch before importing pyiqa (for frozen builds)
+if getattr(sys, 'frozen', False):
+    try:
+        import pyiqa_patch
+        pyiqa_patch.apply_patch()
+    except Exception as e:
+        print(f"Warning: Could not apply pyiqa patch: {e}")
+
+# Conditional imports for PyInstaller compatibility
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+
+try:
+    import pyiqa
+    PYIQA_AVAILABLE = True
+except ImportError as e:
+    print(f"Warning: PyIQA not available: {e}")
+    PYIQA_AVAILABLE = False
 
 # Handle packaged paths
 if getattr(sys, 'frozen', False):
@@ -64,16 +84,32 @@ app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max file size
 for folder in [app.config['UPLOAD_FOLDER'], app.config['THUMBNAILS_FOLDER'], app.config['EXPORTS_FOLDER']]:
     os.makedirs(folder, exist_ok=True)
 
-# Initialize IQA models
-try:
-    brisque_model = pyiqa.create_metric('brisque')
-    niqe_model = pyiqa.create_metric('niqe')
-    piqe_model = pyiqa.create_metric('piqe')
-except Exception as e:
-    app.logger.warning(f"Could not initialize PyIQA models: {e}. Using fallback quality metrics.")
-    brisque_model = None
-    niqe_model = None
-    piqe_model = None
+# Initialize IQA models (lazy loading to avoid CLIP import issues in frozen builds)
+brisque_model = None
+niqe_model = None
+piqe_model = None
+
+def get_iqa_models():
+    """Lazy load IQA models only when needed, avoiding CLIP-dependent models"""
+    global brisque_model, niqe_model, piqe_model
+    
+    if not PYIQA_AVAILABLE:
+        app.logger.warning("PyIQA not available. Using fallback quality metrics.")
+        return None, None, None
+    
+    if brisque_model is None:
+        try:
+            # Only use models that don't depend on CLIP
+            # BRISQUE, NIQE, PIQE are traditional metrics without deep learning dependencies
+            app.logger.info("Initializing IQA models...")
+            brisque_model = pyiqa.create_metric('brisque', device='cpu')
+            niqe_model = pyiqa.create_metric('niqe', device='cpu')
+            piqe_model = pyiqa.create_metric('piqe', device='cpu')
+            app.logger.info("IQA models initialized successfully")
+        except Exception as e:
+            app.logger.warning(f"Could not initialize PyIQA models: {e}. Using fallback quality metrics.")
+    
+    return brisque_model, niqe_model, piqe_model
 
 # Initialize face detection
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')

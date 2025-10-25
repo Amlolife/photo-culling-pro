@@ -1,0 +1,54 @@
+name: Dependency Review
+
+on:
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday
+  workflow_dispatch:
+
+jobs:
+  dependency-review:
+    name: Review Dependencies
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Dependency Review
+      uses: actions/dependency-review-action@v4
+      with:
+        fail-on-severity: moderate
+
+  check-outdated:
+    name: Check Outdated Packages
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    
+    - name: Check for outdated packages
+      run: |
+        echo "## Outdated Packages" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        pip list --outdated --format=columns | tee outdated.txt
+        if [ -s outdated.txt ]; then
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          cat outdated.txt >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "All packages are up to date! ✅" >> $GITHUB_STEP_SUMMARY
+        fi
+      continue-on-error: true

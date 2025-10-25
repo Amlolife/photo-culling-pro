@@ -1,41 +1,145 @@
-name: Build .exe
+name: Build PhotoCullPro
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
   pull_request:
     branches: [ main ]
   release:
     types: [published]
+  workflow_dispatch:  # Allow manual triggers
+
+env:
+  PYTHON_VERSION: '3.11'
+  BUILD_NAME: PhotoCullPro
 
 jobs:
   build:
+    name: Build Windows Executable
     runs-on: windows-latest
+    timeout-minutes: 30
 
     steps:
-    - uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
       with:
-        python-version: '3.11'
+        fetch-depth: 0  # Full history for version info
+
+    - name: Set up Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'  # Cache pip dependencies
+
+    - name: Cache PyInstaller build
+      uses: actions/cache@v4
+      with:
+        path: |
+          build/
+          dist/
+        key: ${{ runner.os }}-pyinstaller-${{ hashFiles('requirements.txt', 'build_exe.py') }}
+        restore-keys: |
+          ${{ runner.os }}-pyinstaller-
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
+        python -m pip install --upgrade pip setuptools wheel
         pip install -r requirements.txt
+        pip list  # Show installed packages for debugging
 
-    - name: Build .exe
-      run: python build_exe.py
+    - name: Verify imports (pre-build check)
+      run: |
+        python -c "import cv2; print(f'OpenCV: {cv2.__version__}')"
+        python -c "import numpy; print(f'NumPy: {numpy.__version__}')"
+        python -c "import flask; print('Flask: OK')"
+        python -c "import PIL; print('Pillow: OK')"
+      continue-on-error: false
 
-    - name: Upload artifact
+    - name: Build executable
+      run: |
+        python build_exe.py
+        if (!(Test-Path "dist\${{ env.BUILD_NAME }}.exe")) {
+          Write-Error "Build failed: executable not found"
+          exit 1
+        }
+
+    - name: Get build info
+      id: build_info
+      run: |
+        $exePath = "dist\${{ env.BUILD_NAME }}.exe"
+        $fileSize = (Get-Item $exePath).Length
+        $fileSizeMB = [math]::Round($fileSize / 1MB, 2)
+        echo "size_mb=$fileSizeMB" >> $env:GITHUB_OUTPUT
+        echo "size_bytes=$fileSize" >> $env:GITHUB_OUTPUT
+        
+        # Get short commit SHA
+        $shortSha = "${{ github.sha }}".Substring(0, 7)
+        echo "short_sha=$shortSha" >> $env:GITHUB_OUTPUT
+        
+        # Generate artifact name with version
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        echo "artifact_name=${{ env.BUILD_NAME }}-$shortSha-$timestamp" >> $env:GITHUB_OUTPUT
+
+    - name: Test executable (smoke test)
+      run: |
+        # Quick test that exe can start (will fail if missing dependencies)
+        $process = Start-Process -FilePath "dist\${{ env.BUILD_NAME }}.exe" -PassThru -WindowStyle Hidden
+        Start-Sleep -Seconds 5
+        if (!$process.HasExited) {
+          Stop-Process -Id $process.Id -Force
+          Write-Host "✓ Executable started successfully"
+        } else {
+          Write-Error "✗ Executable crashed on startup"
+          exit 1
+        }
+      continue-on-error: true  # Don't fail build if smoke test fails
+
+    - name: Upload build artifact
       uses: actions/upload-artifact@v4
       with:
-        name: PhotoCullPro-exe
-        path: dist/PhotoCullPro.exe*
+        name: ${{ steps.build_info.outputs.artifact_name }}
+        path: |
+          dist/${{ env.BUILD_NAME }}.exe
+          dist/${{ env.BUILD_NAME }}.exe.manifest
+        retention-days: 30
+        if-no-files-found: error
 
-    - name: Upload release asset
+    - name: Create build summary
+      run: |
+        echo "### Build Summary 🎉" >> $env:GITHUB_STEP_SUMMARY
+        echo "" >> $env:GITHUB_STEP_SUMMARY
+        echo "- **Executable**: ${{ env.BUILD_NAME }}.exe" >> $env:GITHUB_STEP_SUMMARY
+        echo "- **Size**: ${{ steps.build_info.outputs.size_mb }} MB" >> $env:GITHUB_STEP_SUMMARY
+        echo "- **Commit**: ${{ steps.build_info.outputs.short_sha }}" >> $env:GITHUB_STEP_SUMMARY
+        echo "- **Python**: ${{ env.PYTHON_VERSION }}" >> $env:GITHUB_STEP_SUMMARY
+        echo "- **Runner**: ${{ runner.os }}" >> $env:GITHUB_STEP_SUMMARY
+        echo "" >> $env:GITHUB_STEP_SUMMARY
+        echo "Download the artifact from the Actions tab." >> $env:GITHUB_STEP_SUMMARY
+
+    - name: Upload to release
       if: github.event_name == 'release'
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v2
       with:
-        files: dist/PhotoCullPro.exe*
+        files: |
+          dist/${{ env.BUILD_NAME }}.exe
+        body: |
+          ## 📦 Build Information
+          - **Size**: ${{ steps.build_info.outputs.size_mb }} MB
+          - **Python**: ${{ env.PYTHON_VERSION }}
+          - **Commit**: ${{ github.sha }}
+          
+          ### Installation
+          1. Download `${{ env.BUILD_NAME }}.exe`
+          2. Run the executable
+          3. Access the web interface at http://localhost:5000
+          
+          ### Notes
+          - No installation required
+          - Windows Defender may show a warning (click "More info" → "Run anyway")
+          - First run may take a few seconds to extract files
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

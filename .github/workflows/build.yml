@@ -32,10 +32,10 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: PhotoCullPro-exe
-        path: dist/PhotoCullPro.exe
+        path: dist/PhotoCullPro.exe*
 
     - name: Upload release asset
       if: github.event_name == 'release'
       uses: softprops/action-gh-release@v1
       with:
-        files: dist/PhotoCullPro.exe
+        files: dist/PhotoCullPro.exe*

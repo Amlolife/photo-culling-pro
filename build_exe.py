@@ -12,6 +12,7 @@ def build():
         '--clean',
         '--name', 'PhotoCullPro',
         '--windowed',
+        '--onefile',
     ]
 
     data_paths = [
